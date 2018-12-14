@@ -11,8 +11,7 @@ namespace ChloeDemo
     public class OracleDemo
     {
         /* WARNING: DbContext 是非线程安全的，正式使用不能设置为 static，并且用完务必要调用 Dispose 方法销毁对象 */
-        //static OracleContext context = new OracleContext(new OracleConnectionFactory("Data Source=localhost/orcl;User ID=system;Password=sa;"));
-        static OracleContext context = new OracleContext(new OracleConnectionFactory("Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST =localhost)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME =chloe))); User ID =system; Password=sa"));
+        static OracleContext context = new OracleContext(new OracleConnectionFactory("Data Source=localhost/chloe;User ID=system;Password=sa;"));
 
         public static void Run()
         {
@@ -144,12 +143,12 @@ namespace ChloeDemo
         {
             IQuery<User> q = context.Query<User>();
 
-            q.Select(a => AggregateFunctions.Count()).First();
+            q.Select(a => Sql.Count()).First();
             /*
              * SELECT COUNT(1) AS "C" FROM "USERS" "USERS" WHERE ROWNUM < 2
              */
 
-            q.Select(a => new { Count = AggregateFunctions.Count(), LongCount = AggregateFunctions.LongCount(), Sum = AggregateFunctions.Sum(a.Age), Max = AggregateFunctions.Max(a.Age), Min = AggregateFunctions.Min(a.Age), Average = AggregateFunctions.Average(a.Age) }).First();
+            q.Select(a => new { Count = Sql.Count(), LongCount = Sql.LongCount(), Sum = Sql.Sum(a.Age), Max = Sql.Max(a.Age), Min = Sql.Min(a.Age), Average = Sql.Average(a.Age) }).First();
             /*
              * SELECT COUNT(1) AS "COUNT",COUNT(1) AS "LONGCOUNT",SUM("USERS"."AGE") AS "SUM",MAX("USERS"."AGE") AS "MAX",MIN("USERS"."AGE") AS "MIN",AVG("USERS"."AGE") AS "AVERAGE" FROM "USERS" "USERS" WHERE ROWNUM < 2
              */
@@ -192,9 +191,9 @@ namespace ChloeDemo
 
             IGroupingQuery<User> g = q.Where(a => a.Id > 0).GroupBy(a => a.Age);
 
-            g = g.Having(a => a.Age > 1 && AggregateFunctions.Count() > 0);
+            g = g.Having(a => a.Age > 1 && Sql.Count() > 0);
 
-            g.Select(a => new { a.Age, Count = AggregateFunctions.Count(), Sum = AggregateFunctions.Sum(a.Age), Max = AggregateFunctions.Max(a.Age), Min = AggregateFunctions.Min(a.Age), Avg = AggregateFunctions.Average(a.Age) }).ToList();
+            g.Select(a => new { a.Age, Count = Sql.Count(), Sum = Sql.Sum(a.Age), Max = Sql.Max(a.Age), Min = Sql.Min(a.Age), Avg = Sql.Average(a.Age) }).ToList();
             /*
              * SELECT "USERS"."AGE" AS "AGE",COUNT(1) AS "COUNT",SUM("USERS"."AGE") AS "SUM",MAX("USERS"."AGE") AS "MAX",MIN("USERS"."AGE") AS "MIN",AVG("USERS"."AGE") AS "AVG" FROM "USERS" "USERS" WHERE "USERS"."ID" > 0 GROUP BY "USERS"."AGE" HAVING ("USERS"."AGE" > 1 AND COUNT(1) > 0)
              */
@@ -414,6 +413,7 @@ namespace ChloeDemo
                 TrimEnd = a.Name.TrimEnd(space),//RTRIM("USERS"."NAME")
                 StartsWith = (bool?)a.Name.StartsWith("s"),//
                 EndsWith = (bool?)a.Name.EndsWith("s"),//
+                Replace = a.Name.Replace("l", "L"),
 
                 /* oracle is not supported DbFunctions.Diffxx. */
                 //DiffYears = DbFunctions.DiffYears(startTime, endTime),//

@@ -16,28 +16,13 @@ namespace Chloe.Oracle
 {
     public partial class OracleContext : DbContext
     {
-        DbContextServiceProvider _dbContextServiceProvider;
+        DatabaseProvider _databaseProvider;
         bool _convertToUppercase = true;
         public OracleContext(IDbConnectionFactory dbConnectionFactory)
         {
             Utils.CheckNull(dbConnectionFactory);
 
-            this._dbContextServiceProvider = new DbContextServiceProvider(dbConnectionFactory, this);
-        }
-
-        static readonly Dictionary<Type, Type> ToStringableNumericTypes;
-        static OracleContext()
-        {
-            List<Type> toStringableNumericTypes = new List<Type>();
-            toStringableNumericTypes.Add(typeof(byte));
-            toStringableNumericTypes.Add(typeof(sbyte));
-            toStringableNumericTypes.Add(typeof(short));
-            toStringableNumericTypes.Add(typeof(ushort));
-            toStringableNumericTypes.Add(typeof(int));
-            toStringableNumericTypes.Add(typeof(uint));
-            toStringableNumericTypes.Add(typeof(long));
-            toStringableNumericTypes.Add(typeof(ulong));
-            ToStringableNumericTypes = toStringableNumericTypes.ToDictionary(a => a, a => a);
+            this._databaseProvider = new DatabaseProvider(dbConnectionFactory, this);
         }
 
 
@@ -45,9 +30,9 @@ namespace Chloe.Oracle
         /// 是否将 sql 中的表名/字段名转成大写。默认为 true。
         /// </summary>
         public bool ConvertToUppercase { get { return this._convertToUppercase; } set { this._convertToUppercase = value; } }
-        public override IDbContextServiceProvider DbContextServiceProvider
+        public override IDatabaseProvider DatabaseProvider
         {
-            get { return this._dbContextServiceProvider; }
+            get { return this._databaseProvider; }
         }
 
         public override TEntity Insert<TEntity>(TEntity entity, string table)
@@ -255,7 +240,7 @@ namespace Chloe.Oracle
                             valType = val.GetType();
                         }
 
-                        if (ToStringableNumericTypes.ContainsKey(valType))
+                        if (Utils.IsToStringableNumericType(valType))
                         {
                             sqlBuilder.Append(val.ToString());
                         }
@@ -265,30 +250,6 @@ namespace Chloe.Oracle
                                 sqlBuilder.AppendFormat("1");
                             else
                                 sqlBuilder.AppendFormat("0");
-                        }
-                        else if (val is double)
-                        {
-                            double v = (double)val;
-                            if (v >= long.MinValue && v <= long.MaxValue)
-                            {
-                                sqlBuilder.Append(((long)v).ToString());
-                            }
-                        }
-                        else if (val is float)
-                        {
-                            float v = (float)val;
-                            if (v >= long.MinValue && v <= long.MaxValue)
-                            {
-                                sqlBuilder.Append(((long)v).ToString());
-                            }
-                        }
-                        else if (val is decimal)
-                        {
-                            decimal v = (decimal)val;
-                            if (v >= long.MinValue && v <= long.MaxValue)
-                            {
-                                sqlBuilder.Append(((long)v).ToString());
-                            }
                         }
                         else
                         {
@@ -444,7 +405,7 @@ namespace Chloe.Oracle
 
         int ExecuteSqlCommand(DbExpression e)
         {
-            IDbExpressionTranslator translator = this.DbContextServiceProvider.CreateDbExpressionTranslator();
+            IDbExpressionTranslator translator = this.DatabaseProvider.CreateDbExpressionTranslator();
             List<DbParam> parameters;
             string cmdText = translator.Translate(e, out parameters);
 

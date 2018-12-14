@@ -40,12 +40,12 @@
     <Reference Include="System.XML" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AggregateFunctions.cs" />
     <Compile Include="Core\DbCommandFactor.cs" />
     <Compile Include="Core\DbSession.cs" />
     <Compile Include="Core\Emit\ClassGenerator.cs" />
     <Compile Include="Core\Emit\DelegateGenerator.cs" />
     <Compile Include="Core\Emit\EmitHelper.cs" />
+    <Compile Include="Core\IDbValueConverter.cs" />
     <Compile Include="Core\IEntityState.cs" />
     <Compile Include="Core\InternalDataReader.cs" />
     <Compile Include="Core\InternalAdoSession.cs" />
@@ -75,6 +75,7 @@
     <Compile Include="DbExpressions\DbExistsExpression.cs" />
     <Compile Include="DbExpressions\DbExpression.cs" />
     <Compile Include="DbExpressions\DbExpressionType.cs" />
+    <Compile Include="DbExpressions\DbExpressionVisitor.cs" />
     <Compile Include="DbExpressions\DbExpressionVisitor`.cs" />
     <Compile Include="DbExpressions\DbFromTableExpression.cs" />
     <Compile Include="DbExpressions\DbAggregateExpression.cs" />
@@ -105,7 +106,6 @@
     <Compile Include="DbExpressions\DbUpdateExpression.cs" />
     <Compile Include="DbExpressions\DbJoinType.cs" />
     <Compile Include="DbExpressions\DbOrderType.cs" />
-    <Compile Include="DbFunctions.cs" />
     <Compile Include="DbParam.cs" />
     <Compile Include="DbParamList.cs" />
     <Compile Include="Descriptors\EntityConstructorDescriptor.cs" />
@@ -131,7 +131,7 @@
     <Compile Include="Infrastructure\MappingTypeSystem.cs" />
     <Compile Include="Infrastructure\Interception\DbCommandInterceptionContext`.cs" />
     <Compile Include="Infrastructure\IDbConnectionFactory.cs" />
-    <Compile Include="Infrastructure\IDbContextServiceProvider.cs" />
+    <Compile Include="Infrastructure\IDatabaseProvider.cs" />
     <Compile Include="Infrastructure\IDbExpressionTranslator.cs" />
     <Compile Include="Infrastructure\Interception\DbInterception.cs" />
     <Compile Include="Infrastructure\Interception\IDbCommandInterceptor.cs" />
@@ -163,7 +163,9 @@
     <Compile Include="Query\Internals\QueryEnumerator.cs" />
     <Compile Include="Query\JoiningQueryInfo.cs" />
     <Compile Include="Query\JoiningQuery`.cs" />
+    <Compile Include="Query\JoinQueryParameterExpressionReplacer.cs" />
     <Compile Include="Query\JoinQueryResult.cs" />
+    <Compile Include="Query\JoinResult.cs" />
     <Compile Include="Query\MappingFieldExpression.cs" />
     <Compile Include="Query\MappingObjectExpression.cs" />
     <Compile Include="Query\Mapping\IObjectActivatorCreator.cs" />
@@ -185,6 +187,7 @@
     <Compile Include="Query\QueryExpressions\SkipExpression.cs" />
     <Compile Include="Query\QueryExpressions\TakeExpression.cs" />
     <Compile Include="Query\QueryExpressions\WhereExpression.cs" />
+    <Compile Include="Query\QueryHelper.cs" />
     <Compile Include="Query\QueryState\AggregateQueryState.cs" />
     <Compile Include="Query\QueryState\DistinctQueryState.cs" />
     <Compile Include="Query\QueryState\GeneralQueryState.cs" />
@@ -204,6 +207,8 @@
     <Compile Include="Query\Visitors\JoinQueryExpressionVisitor.cs" />
     <Compile Include="Query\Visitors\QueryExpressionVisitor.cs" />
     <Compile Include="Query\Visitors\SelectorExpressionVisitor.cs" />
+    <Compile Include="Sql.cs" />
+    <Compile Include="Utility\ConstantWrapper`.cs" />
     <Compile Include="Utility\KeyDictionary.cs" />
     <Compile Include="Utility\KeyValuePairList.cs" />
     <Compile Include="Utility\UtilConstants.cs" />

@@ -17,7 +17,7 @@ namespace Chloe.SQLite
 {
     public class SQLiteContext : DbContext
     {
-        DbContextServiceProvider _dbContextServiceProvider;
+        DatabaseProvider _databaseProvider;
         public SQLiteContext(IDbConnectionFactory dbConnectionFactory)
             : this(dbConnectionFactory, true)
         {
@@ -34,27 +34,13 @@ namespace Chloe.SQLite
             if (concurrencyMode == true)
                 dbConnectionFactory = new ConcurrentDbConnectionFactory(dbConnectionFactory);
 
-            this._dbContextServiceProvider = new DbContextServiceProvider(dbConnectionFactory);
+            this._databaseProvider = new DatabaseProvider(dbConnectionFactory);
         }
 
-        static readonly Dictionary<Type, Type> ToStringableNumericTypes;
-        static SQLiteContext()
-        {
-            List<Type> toStringableNumericTypes = new List<Type>();
-            toStringableNumericTypes.Add(typeof(byte));
-            toStringableNumericTypes.Add(typeof(sbyte));
-            toStringableNumericTypes.Add(typeof(short));
-            toStringableNumericTypes.Add(typeof(ushort));
-            toStringableNumericTypes.Add(typeof(int));
-            toStringableNumericTypes.Add(typeof(uint));
-            toStringableNumericTypes.Add(typeof(long));
-            toStringableNumericTypes.Add(typeof(ulong));
-            ToStringableNumericTypes = toStringableNumericTypes.ToDictionary(a => a, a => a);
-        }
 
-        public override IDbContextServiceProvider DbContextServiceProvider
+        public override IDatabaseProvider DatabaseProvider
         {
-            get { return this._dbContextServiceProvider; }
+            get { return this._databaseProvider; }
         }
         protected override string GetSelectLastInsertIdClause()
         {
@@ -120,7 +106,7 @@ namespace Chloe.SQLite
                             valType = val.GetType();
                         }
 
-                        if (ToStringableNumericTypes.ContainsKey(valType))
+                        if (Utils.IsToStringableNumericType(valType))
                         {
                             sqlBuilder.Append(val.ToString());
                             continue;
@@ -133,33 +119,6 @@ namespace Chloe.SQLite
                             else
                                 sqlBuilder.AppendFormat("0");
                             continue;
-                        }
-                        else if (val is double)
-                        {
-                            double v = (double)val;
-                            if (v >= long.MinValue && v <= long.MaxValue)
-                            {
-                                sqlBuilder.Append(((long)v).ToString());
-                                continue;
-                            }
-                        }
-                        else if (val is float)
-                        {
-                            float v = (float)val;
-                            if (v >= long.MinValue && v <= long.MaxValue)
-                            {
-                                sqlBuilder.Append(((long)v).ToString());
-                                continue;
-                            }
-                        }
-                        else if (val is decimal)
-                        {
-                            decimal v = (decimal)val;
-                            if (v >= long.MinValue && v <= long.MaxValue)
-                            {
-                                sqlBuilder.Append(((long)v).ToString());
-                                continue;
-                            }
                         }
 
                         string paramName = UtilConstants.ParameterNamePrefix + dbParams.Count.ToString();

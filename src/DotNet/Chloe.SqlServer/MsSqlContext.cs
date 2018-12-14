@@ -19,7 +19,7 @@ namespace Chloe.SqlServer
 {
     public class MsSqlContext : DbContext
     {
-        DbContextServiceProvider _dbContextServiceProvider;
+        DatabaseProvider _databaseProvider;
         public MsSqlContext(string connString)
             : this(new DefaultDbConnectionFactory(connString))
         {
@@ -30,11 +30,11 @@ namespace Chloe.SqlServer
             Utils.CheckNull(dbConnectionFactory);
 
             this.PagingMode = PagingMode.ROW_NUMBER;
-            this._dbContextServiceProvider = new DbContextServiceProvider(dbConnectionFactory, this);
+            this._databaseProvider = new DatabaseProvider(dbConnectionFactory, this);
         }
 
         static Dictionary<string, SysType> SysTypes;
-        static readonly Dictionary<Type, Type> ToStringableNumericTypes;
+
         static MsSqlContext()
         {
             List<SysType> sysTypes = new List<SysType>();
@@ -74,26 +74,15 @@ namespace Chloe.SqlServer
             sysTypes.Add(new SysType<string>("sysname"));
 
             SysTypes = sysTypes.ToDictionary(a => a.TypeName, a => a);
-
-            List<Type> toStringableNumericTypes = new List<Type>();
-            toStringableNumericTypes.Add(typeof(byte));
-            toStringableNumericTypes.Add(typeof(sbyte));
-            toStringableNumericTypes.Add(typeof(short));
-            toStringableNumericTypes.Add(typeof(ushort));
-            toStringableNumericTypes.Add(typeof(int));
-            toStringableNumericTypes.Add(typeof(uint));
-            toStringableNumericTypes.Add(typeof(long));
-            toStringableNumericTypes.Add(typeof(ulong));
-            ToStringableNumericTypes = toStringableNumericTypes.ToDictionary(a => a, a => a);
         }
 
         /// <summary>
         /// 分页模式。
         /// </summary>
         public PagingMode PagingMode { get; set; }
-        public override IDbContextServiceProvider DbContextServiceProvider
+        public override IDatabaseProvider DatabaseProvider
         {
-            get { return this._dbContextServiceProvider; }
+            get { return this._databaseProvider; }
         }
 
 
@@ -155,7 +144,7 @@ namespace Chloe.SqlServer
                             valType = val.GetType();
                         }
 
-                        if (ToStringableNumericTypes.ContainsKey(valType))
+                        if (Utils.IsToStringableNumericType(valType))
                         {
                             sqlBuilder.Append(val.ToString());
                             continue;
@@ -168,33 +157,6 @@ namespace Chloe.SqlServer
                             else
                                 sqlBuilder.AppendFormat("0");
                             continue;
-                        }
-                        else if (val is double)
-                        {
-                            double v = (double)val;
-                            if (v >= long.MinValue && v <= long.MaxValue)
-                            {
-                                sqlBuilder.Append(((long)v).ToString());
-                                continue;
-                            }
-                        }
-                        else if (val is float)
-                        {
-                            float v = (float)val;
-                            if (v >= long.MinValue && v <= long.MaxValue)
-                            {
-                                sqlBuilder.Append(((long)v).ToString());
-                                continue;
-                            }
-                        }
-                        else if (val is decimal)
-                        {
-                            decimal v = (decimal)val;
-                            if (v >= long.MinValue && v <= long.MaxValue)
-                            {
-                                sqlBuilder.Append(((long)v).ToString());
-                                continue;
-                            }
                         }
 
                         string paramName = UtilConstants.ParameterNamePrefix + dbParams.Count.ToString();
@@ -264,7 +226,7 @@ namespace Chloe.SqlServer
         /// <param name="entities"></param>
         /// <param name="batchSize">设置 SqlBulkCopy.BatchSize 的值</param>
         /// <param name="bulkCopyTimeout">设置 SqlBulkCopy.BulkCopyTimeout 的值</param>
-        /// <param name="keepIdentity">是否保留源标识值。false 由数据库分配标识值。</param>
+        /// <param name="keepIdentity">是否保留源自增值。false 由数据库分配自增值</param>
         public virtual void BulkInsert<TEntity>(List<TEntity> entities, int? batchSize = null, int? bulkCopyTimeout = null, bool keepIdentity = false)
         {
             Utils.CheckNull(entities);
@@ -285,7 +247,10 @@ namespace Chloe.SqlServer
                     externalTransaction = this.Session.CurrentTransaction as SqlTransaction;
                 }
 
-                SqlBulkCopyOptions sqlBulkCopyOptions = keepIdentity ? (SqlBulkCopyOptions.KeepNulls | SqlBulkCopyOptions.KeepIdentity) : SqlBulkCopyOptions.KeepNulls;
+                SqlBulkCopyOptions sqlBulkCopyOptions = SqlBulkCopyOptions.CheckConstraints | SqlBulkCopyOptions.KeepNulls | SqlBulkCopyOptions.FireTriggers;
+                if (keepIdentity)
+                    sqlBulkCopyOptions = SqlBulkCopyOptions.KeepIdentity | sqlBulkCopyOptions;
+
                 sbc = new SqlBulkCopy(conn, sqlBulkCopyOptions, externalTransaction);
 
                 using (sbc)
@@ -328,7 +293,10 @@ namespace Chloe.SqlServer
             for (int i = 0; i < columns.Count; i++)
             {
                 var column = columns[i];
-                MappingMemberDescriptor mappingMemberDescriptor = mappingMemberDescriptors.Where(a => a.Column.Name == column.Name).FirstOrDefault();
+                MappingMemberDescriptor mappingMemberDescriptor = mappingMemberDescriptors.Find(a => string.Equals(a.Column.Name, column.Name));
+                if (mappingMemberDescriptor == null)
+                    mappingMemberDescriptor = mappingMemberDescriptors.Find(a => string.Equals(a.Column.Name, column.Name, StringComparison.OrdinalIgnoreCase));
+
                 ColumnMapping columnMapping = new ColumnMapping(column);
                 Type dataType;
                 if (mappingMemberDescriptor == null)
