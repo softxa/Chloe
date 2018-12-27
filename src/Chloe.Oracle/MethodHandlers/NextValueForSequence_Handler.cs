@@ -5,7 +5,7 @@ using System.Text;
 using Chloe.DbExpressions;
 using Chloe.InternalExtensions;
 
-namespace Chloe.SqlServer.MethodHandlers
+namespace Chloe.Oracle.MethodHandlers
 {
     class NextValueForSequence_Handler : IMethodHandler
     {
@@ -22,7 +22,8 @@ namespace Chloe.SqlServer.MethodHandlers
             if (string.IsNullOrEmpty(sequenceName))
                 throw new ArgumentException("The sequence name cannot be empty.");
 
-            generator.SqlBuilder.Append("NEXT VALUE FOR ", sequenceName);
+            generator.QuoteName(sequenceName);
+            generator.SqlBuilder.Append(".nextval");
         }
     }
 }

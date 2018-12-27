@@ -42,34 +42,22 @@ namespace Chloe.Oracle
 
             TypeDescriptor typeDescriptor = EntityTypeContainer.GetDescriptor(entity.GetType());
 
-            Dictionary<PropertyDescriptor, object> keyValueMap = CreateKeyValueMap(typeDescriptor);
-
-            Dictionary<PropertyDescriptor, object> sequenceValues = this.GetSequenceValues(typeDescriptor.PropertyDescriptors.Where(a => a.HasSequence()).ToList());
-
+            List<PropertyDescriptor> outputColumns = new List<PropertyDescriptor>();
             Dictionary<PropertyDescriptor, DbExpression> insertColumns = new Dictionary<PropertyDescriptor, DbExpression>();
             foreach (PropertyDescriptor propertyDescriptor in typeDescriptor.PropertyDescriptors)
             {
-                object val = null;
                 if (propertyDescriptor.HasSequence())
                 {
-                    val = sequenceValues[propertyDescriptor];
+                    DbMethodCallExpression getNextValueForSequenceExp = PublicHelper.MakeNextValueForSequenceDbExpression(propertyDescriptor);
+                    insertColumns.Add(propertyDescriptor, getNextValueForSequenceExp);
+                    outputColumns.Add(propertyDescriptor);
+                    continue;
                 }
-                else
-                    val = propertyDescriptor.GetValue(entity);
 
-                if (propertyDescriptor.IsPrimaryKey)
-                {
-                    keyValueMap[propertyDescriptor] = val;
-                }
+                object val = propertyDescriptor.GetValue(entity);
 
                 DbExpression valExp = DbExpression.Parameter(val, propertyDescriptor.PropertyType, propertyDescriptor.Column.DbType);
                 insertColumns.Add(propertyDescriptor, valExp);
-            }
-
-            PropertyDescriptor nullValueKey = keyValueMap.Where(a => a.Value == null).Select(a => a.Key).FirstOrDefault();
-            if (nullValueKey != null)
-            {
-                throw new ChloeException(string.Format("The primary key '{0}' could not be null.", nullValueKey.Property.Name));
             }
 
             DbTable dbTable = table == null ? typeDescriptor.Table : new DbTable(table, typeDescriptor.Table.Schema);
@@ -80,11 +68,19 @@ namespace Chloe.Oracle
                 e.InsertColumns.Add(kv.Key.Column, kv.Value);
             }
 
-            this.ExecuteSqlCommand(e);
+            e.Returns.AddRange(outputColumns.Select(a => a.Column));
 
-            foreach (var kv in sequenceValues)
+            List<DbParam> parameters;
+            this.ExecuteSqlCommand(e, out parameters);
+
+            List<DbParam> outputParams = parameters.Where(a => a.Direction == ParamDirection.Output).ToList();
+
+            for (int i = 0; i < outputColumns.Count; i++)
             {
-                kv.Key.SetValue(entity, kv.Value);
+                PropertyDescriptor propertyDescriptor = outputColumns[i];
+                string putputColumnName = Utils.GenOutputColumnParameterName(propertyDescriptor.Column.Name);
+                DbParam outputParam = outputParams.Where(a => a.Name == putputColumnName).First();
+                outputColumns[i].SetValue(entity, outputParam.Value);
             }
 
             return entity;
@@ -140,21 +136,33 @@ namespace Chloe.Oracle
                 insertExp.InsertColumns.Add(propertyDescriptor.Column, expressionParser.Parse(kv.Value));
             }
 
-            Dictionary<PropertyDescriptor, object> sequenceValues = this.GetSequenceValues(typeDescriptor.PropertyDescriptors.Where(a => a.HasSequence()).ToList());
-
-            foreach (var kv in sequenceValues)
+            var sequencePropertyDescriptors = typeDescriptor.PropertyDescriptors.Where(a => a.HasSequence());
+            foreach (PropertyDescriptor sequencePropertyDescriptor in sequencePropertyDescriptors)
             {
-                insertExp.InsertColumns.Add(kv.Key.Column, DbExpression.Parameter(kv.Value));
-                if (kv.Key.IsPrimaryKey)
-                    keyVal = kv.Value;
+                DbMethodCallExpression getNextValueForSequenceExp = PublicHelper.MakeNextValueForSequenceDbExpression(sequencePropertyDescriptor);
+                insertExp.InsertColumns.Add(sequencePropertyDescriptor.Column, getNextValueForSequenceExp);
+
+                if (sequencePropertyDescriptor.IsPrimaryKey)
+                {
+                    insertExp.Returns.Add(sequencePropertyDescriptor.Column);
+                }
             }
 
-            if (keyPropertyDescriptor != null && keyVal == null)
+            if (keyPropertyDescriptor != null && !keyPropertyDescriptor.HasSequence() && keyVal == null)
             {
                 throw new ChloeException(string.Format("The primary key '{0}' could not be null.", keyPropertyDescriptor.Property.Name));
             }
 
-            this.ExecuteSqlCommand(insertExp);
+            List<DbParam> parameters;
+            this.ExecuteSqlCommand(insertExp, out parameters);
+
+            if (keyPropertyDescriptor != null && keyPropertyDescriptor.HasSequence())
+            {
+                string putputColumnName = Utils.GenOutputColumnParameterName(keyPropertyDescriptor.Column.Name);
+                DbParam outputParam = parameters.Where(a => a.Direction == ParamDirection.Output && a.Name == putputColumnName).First();
+                keyVal = PublicHelper.ConvertObjType(outputParam.Value, keyPropertyDescriptor.PropertyType);
+            }
+
             return keyVal; /* It will return null if an entity does not define primary key. */
         }
         public override void InsertRange<TEntity>(List<TEntity> entities, bool keepIdentity = false, string table = null)
@@ -385,52 +393,16 @@ namespace Chloe.Oracle
 
         int ExecuteSqlCommand(DbExpression e)
         {
-            IDbExpressionTranslator translator = this.DatabaseProvider.CreateDbExpressionTranslator();
             List<DbParam> parameters;
+            return this.ExecuteSqlCommand(e, out parameters);
+        }
+        int ExecuteSqlCommand(DbExpression e, out List<DbParam> parameters)
+        {
+            IDbExpressionTranslator translator = this.DatabaseProvider.CreateDbExpressionTranslator();
             string cmdText = translator.Translate(e, out parameters);
 
             int r = this.Session.ExecuteNonQuery(cmdText, parameters.ToArray());
             return r;
-        }
-        Dictionary<PropertyDescriptor, object> GetSequenceValues(List<PropertyDescriptor> sequencePropertyDescriptors)
-        {
-            Dictionary<PropertyDescriptor, object> ret = new Dictionary<PropertyDescriptor, object>(sequencePropertyDescriptors.Count);
-            if (sequencePropertyDescriptors.Count == 0)
-                return ret;
-
-            StringBuilder sql = new StringBuilder();
-            sql.Append("SELECT ");
-            for (int i = 0; i < sequencePropertyDescriptors.Count; i++)
-            {
-                var sequencePropertyDescriptor = sequencePropertyDescriptors[i];
-                string sequenceName = sequencePropertyDescriptor.Definition.SequenceName;
-                if (this.ConvertToUppercase)
-                    sequenceName = sequenceName.ToUpper();
-
-                if (i > 0)
-                    sql.Append(",");
-
-                sql.Append($"\"{sequenceName}\".\"NEXTVAL\"");
-                sql.Append(" V");
-                sql.Append(i);
-            }
-            sql.Append(" FROM \"DUAL\"");
-
-            var dataReader = this.Session.ExecuteReader(sql.ToString());
-            using (dataReader)
-            {
-                dataReader.Read();
-                for (int i = 0; i < dataReader.FieldCount; i++)
-                {
-                    var sequencePropertyDescriptor = sequencePropertyDescriptors[i];
-                    object sequenceValue = PublicHelper.ConvertObjType(dataReader.GetValue(i), sequencePropertyDescriptor.PropertyType);
-                    ret.Add(sequencePropertyDescriptor, sequenceValue);
-                }
-
-                dataReader.Close();
-            }
-
-            return ret;
         }
 
         string AppendInsertRangeSqlTemplate(DbTable table, List<PropertyDescriptor> mappingPropertyDescriptors, bool keepIdentity)
